@@ -28,8 +28,8 @@ ALL_LABELS = [
     'Emphysema', 'Fibrosis', 'Pleural_Thickening', 'Hernia'
 ]
 NUM_CLASSES        = len(ALL_LABELS)   # 14
-IMAGE_SIZE         = 224
-DEFAULT_MODEL_PATH = "model_weights.pth"
+IMAGE_SIZE         = 320              # 320x320 input size used during training
+DEFAULT_MODEL_PATH = "best_model.pth"
 DEFAULT_THRESHOLD  = 0.5
 DEVICE             = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -65,7 +65,7 @@ def load_model(model_path: str) -> nn.Module:
 def get_transform() -> transforms.Compose:
     """Standard ImageNet preprocessing used during training."""
     return transforms.Compose([
-        transforms.Resize((256, 256)),
+        transforms.Resize((320, 320)),
         transforms.CenterCrop(IMAGE_SIZE),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -82,7 +82,7 @@ def predict(image_path: str, model: nn.Module, threshold: float = DEFAULT_THRESH
     transform = get_transform()
 
     image = Image.open(image_path).convert("RGB")
-    input_tensor = transform(image).unsqueeze(0).to(DEVICE)  # (1, 3, 224, 224)
+    input_tensor = transform(image).unsqueeze(0).to(DEVICE)  # (1, 3, 320, 320)
 
     with torch.inference_mode():
         logits = model(input_tensor)             # (1, 14)

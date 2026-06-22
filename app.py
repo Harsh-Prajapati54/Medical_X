@@ -1,5 +1,11 @@
 import streamlit as st
 from PIL import Image
+import torch
+import torchvision.models as models
+import torch.nn as nn
+from predict import load_model, get_transform, ALL_LABELS, GradCAM, overlay_gradcam
+import cv2
+import numpy as np
 
 st.set_page_config(
     page_title="Med-X · Chest X-ray Analysis",
@@ -265,17 +271,51 @@ with col3:
         </div>
     """, unsafe_allow_html=True)
 
-def run_inference(image):
-    mock = {
-        "Infiltration": 0.72, "Effusion": 0.58,
-        "Atelectasis": 0.41,  "No Finding": 0.19,
-        "Pneumonia": 0.12,    "Cardiomegaly": 0.08,
-        "Mass": 0.06,         "Nodule": 0.05,
-        "Consolidation": 0.04,"Emphysema": 0.03,
-        "Pleural Thickening": 0.02, "Hernia": 0.01,
-        "Edema": 0.01,        "Fibrosis": 0.01,
-    }
-    return dict(sorted(mock.items(), key=lambda x: x[1], reverse=True))
+# Load model once — cache it so it doesn't reload on every rerun
+@st.cache_resource
+def get_model():
+    return load_model("model_weights.pth")
+
+def run_inference(image: Image.Image, threshold=0.5):
+    model = get_model()
+    transform = get_transform()
+    
+    input_tensor = transform(image.convert("RGB")).unsqueeze(0)
+    
+    with torch.inference_mode():
+        logits = model(input_tensor)
+        probs  = torch.sigmoid(logits).squeeze()
+    
+    probs_np = probs.cpu().numpy()
+    scores = {ALL_LABELS[i]: float(probs_np[i]) for i in range(len(ALL_LABELS))}
+    return dict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
+
+def real_gradcam(image: Image.Image) -> Image.Image:
+    model = get_model()
+    transform = get_transform()
+
+    input_tensor = transform(image.convert("RGB")).unsqueeze(0)
+
+    # Get top predicted class
+    with torch.inference_mode():
+        logits = model(input_tensor)
+        probs  = torch.sigmoid(logits).squeeze().cpu().numpy()
+    top_idx = int(probs.argmax())
+
+    # Generate heatmap
+    gcam    = GradCAM(model)
+    heatmap = gcam.generate(input_tensor, class_idx=top_idx)
+
+    # Overlay on original image
+    img_cv  = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2BGR)
+    heatmap_resized = cv2.resize(heatmap, (img_cv.shape[1], img_cv.shape[0]))
+    heatmap_uint8   = np.uint8(255 * heatmap_resized)
+    heatmap_colored = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
+    result          = cv2.addWeighted(img_cv, 0.6, heatmap_colored, 0.4, 0)
+    result_rgb      = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
+
+    return Image.fromarray(result_rgb)
+
 
 col_left, col_right = st.columns([1, 1.1], gap="medium")
 
@@ -341,8 +381,9 @@ with col_right:
         image = Image.open(uploaded_file)
         with st.spinner("Running inference…"):
             scores = run_inference(image)
+            gradcam_img = real_gradcam(image)
+            st.session_state["gradcam"] = gradcam_img
         st.session_state["predictions"] = scores
-
     scores = st.session_state.get("predictions", {})
 
     if scores:
