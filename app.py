@@ -12,7 +12,6 @@ st.set_page_config(
     page_icon="🫁",
     layout="wide",
 )
-# Global CSS
 
 # Global CSS
 st.markdown("""
@@ -180,6 +179,151 @@ section[data-testid="stSidebar"] > div:first-child {
 .legend { display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
 .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #999; }
 .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* ── Upload zone ── */
+.upload-zone {
+    border: 2px dashed rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.03);
+    margin-bottom: 1rem;
+}
+.upload-zone-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.6;
+}
+.upload-zone h4 {
+    color: #e0e0e0;
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+}
+.upload-zone p {
+    color: #888;
+    font-size: 0.78rem;
+    margin: 0;
+}
+
+/* ── Findings badge ── */
+.findings-badge {
+    display: inline-block;
+    background: #f87171;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    letter-spacing: 0.04em;
+    float: right;
+    margin-top: -2px;
+}
+
+/* ── Prediction rows ── */
+.pred-section-label {
+    font-size: 0.7rem;
+    color: #888;
+    margin: 0.2rem 0 0.8rem;
+    letter-spacing: 0.03em;
+}
+.pred-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.pred-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.pred-label {
+    color: #d0d0d0;
+    font-size: 0.88rem;
+    font-weight: 500;
+    flex: 1;
+}
+.pred-bar-wrap {
+    flex: 2;
+    background: rgba(255,255,255,0.07);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+}
+.pred-bar {
+    height: 100%;
+    border-radius: 4px;
+}
+.pred-score {
+    color: #ccc;
+    font-size: 0.82rem;
+    font-family: monospace;
+    min-width: 32px;
+    text-align: right;
+}
+.pred-more {
+    font-size: 0.72rem;
+    color: #666;
+    margin-top: 0.5rem;
+}
+
+/* ── Grad-CAM legend ── */
+.gradcam-legend {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-top: 0.6rem;
+    font-size: 0.78rem;
+    color: #888;
+}
+.gradcam-legend span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+.gradcam-caption {
+    font-size: 0.72rem;
+    color: #555;
+    margin-top: 0.4rem;
+    font-style: italic;
+}
+
+/* ── Run prediction button ── */
+/* Streamlit button override — add this alongside existing button CSS */
+div[data-testid="stButton"] > button[kind="secondary"] {
+    background: rgba(255,255,255,0.06) !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    color: #e0e0e0 !important;
+    border-radius: 10px !important;
+    padding: 0.6rem 1.2rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.02em;
+    transition: background 0.15s;
+}
+div[data-testid="stButton"] > button[kind="secondary"]:hover {
+    background: rgba(255,255,255,0.11) !important;
+}
+
+.pred-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.gradcam-caption {
+    font-size: 0.72rem;
+    color: #555;
+    margin-top: 0.4rem;
+    font-style: italic;
+}
 </style>
 """, unsafe_allow_html=True)
             
@@ -323,7 +467,15 @@ with col_left:
 
     # Upload card
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="card-title">⬆ Upload X-ray image</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="upload-zone">
+    <div class="upload-zone-icon">📂</div>
+    <h4>Drop your X-ray here</h4>
+    <p>PNG, JPG, JPEG · max 10 MB</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+   
     uploaded_file = st.file_uploader(
         label="",
         type=["png", "jpg", "jpeg"],
@@ -391,11 +543,18 @@ with col_right:
                     unsafe_allow_html=True)
         for name, score in list(scores.items())[:5]:
             pct = int(score * 100)
-            if score >= 0.5:   cls = "bar-fill-red"
-            elif score >= 0.25: cls = "bar-fill-amber"
-            else:               cls = "bar-fill-green"
+            if score >= 0.5:
+                cls = "bar-fill-red"
+                dot_color = "#f87171"
+            elif score >= 0.25:
+                cls = "bar-fill-amber"
+                dot_color = "#fb923c"
+            else:
+                cls = "bar-fill-green"
+                dot_color = "#34d399"
             st.markdown(f"""
             <div class="disease-row">
+                <div class="pred-dot" style="background:{dot_color};"></div>
                 <div class="disease-name">{name}</div>
                 <div class="bar-track">
                     <div class="{cls}" style="width:{pct}%"></div>
@@ -422,6 +581,7 @@ with col_right:
             <div class="legend-item"><div class="dot" style="background:#EF9F27"></div>Medium</div>
             <div class="legend-item"><div class="dot" style="background:#1D9E75"></div>Low</div>
         </div>
+        <p class="gradcam-caption">Overlay via st.image() with matplotlib · highlights model focus regions</p>
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
