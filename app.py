@@ -518,7 +518,6 @@ with col_left:
     run_clicked = st.button("⚙ Run prediction", disabled=(uploaded_file is None))
     
 with col_right:
-
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
     ph_left, ph_right = st.columns([1.4, 1])
