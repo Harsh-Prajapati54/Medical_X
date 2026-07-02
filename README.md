@@ -3,6 +3,8 @@
 Multi-label classification of **14 thoracic diseases** from chest X-rays using a fine-tuned **DenseNet121** on the NIH ChestX-ray14 dataset. Includes **Grad-CAM** visualization to highlight the regions the model focuses on for each predicted disease.
 
 ---
+### Live Demo 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://medical-x.streamlit.app)
 
 ## Diseases Detected
 
