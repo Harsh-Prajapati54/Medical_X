@@ -418,7 +418,7 @@ with col3:
 # Load model once — cache it so it doesn't reload on every rerun
 @st.cache_resource
 def get_model():
-    return load_model("model_weights.pth")
+    return load_model("best_model.pth")
 
 def run_inference(image: Image.Image, threshold=0.5):
     model = get_model()

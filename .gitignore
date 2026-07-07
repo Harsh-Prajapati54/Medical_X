@@ -10,3 +10,5 @@
 /pneumonia2.png
 /pneumonia4.jpeg
 /pneumothrox.jpg
+__pycache__/
+*.pyc
