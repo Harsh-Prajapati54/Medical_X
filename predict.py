@@ -40,9 +40,7 @@ def load_model(model_path: str) -> nn.Module:
     model = torchvision.models.densenet121(weights=None)
 
     # Recreate the same classifier used during training
-    model.classifier = nn.Sequential(
-        nn.Linear(in_features=1024, out_features=NUM_CLASSES, bias=True)
-    )
+    model.classifier = nn.Linear(in_features=1024, out_features=NUM_CLASSES, bias=True)
 
     checkpoint = torch.load(model_path, map_location=DEVICE)
 
