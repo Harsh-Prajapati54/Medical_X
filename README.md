@@ -1,240 +1,194 @@
-# MEDICAL-X — Chest X-Ray Disease Detection
+# Med-X — Chest X-Ray Disease Detection
 
-Multi-label classification of **14 thoracic diseases** from chest X-rays using a fine-tuned **DenseNet121** on the NIH ChestX-ray14 dataset. Includes **Grad-CAM** visualization to highlight the regions the model focuses on for each predicted disease.
-
----
-### Live Demo 
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](requirements.txt)
+[![PyTorch](https://img.shields.io/badge/PyTorch-DenseNet121-ee4c2c.svg)](https://pytorch.org/)
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://medical-x.streamlit.app)
 
-## Diseases Detected
+Multi-label classification of **14 thoracic diseases** from frontal chest X-rays. A DenseNet121 pretrained on ImageNet is fine-tuned on NIH ChestX-ray14 with multi-GPU training (PyTorch DDP), per-class decision thresholds, and **Grad-CAM** heatmaps that show where the model looked.
 
-The model predicts the presence of one or more of the following conditions simultaneously:
+> **Not a medical device.** This is a research and learning project. It must not be used for diagnosis or any clinical decision. See [Limitations](#limitations).
 
-| # | Disease | # | Disease |
-|---|---------|---|---------|
-| 1 | Atelectasis | 8 | Pneumothorax |
-| 2 | Cardiomegaly | 9 | Consolidation |
-| 3 | Effusion | 10 | Edema |
-| 4 | Infiltration | 11 | Emphysema |
-| 5 | Mass | 12 | Fibrosis |
-| 6 | Nodule | 13 | Pleural Thickening |
-| 7 | Pneumonia | 14 | Hernia |
 
----
+## Results at a glance
+
+Evaluated on a held-out validation split of NIH ChestX-ray14.
+
+| Metric (macro average over 14 classes) | Value |
+| -------------------------------------- | ----- |
+| AUROC                                  | **0.851** |
+| AUPRC                                  | 0.275 |
+| F1 (at per-class threshold)            | 0.339 |
+
+AUROC is the headline number because it is threshold-free and comparable with published work (CheXNet reports roughly 0.84 average AUROC on this dataset's test set). AUPRC and F1 are shown because most classes are rare, and AUROC alone hides how hard they are in practice.
+
+<p align="center">
+  <img src="docs\images\best_val_roc_curve.png" width="760" alt="Validation ROC curves for all 14 classes">
+</p>
+
+### Per-class validation metrics
+
+Sorted by AUROC. Full-precision values are in [`results/validation_metrics.csv`](results/validation_metrics.csv).
+
+| Class              | AUROC | AUPRC | F1    | Threshold |
+| ------------------ | ----- | ----- | ----- | --------- |
+| Hernia             | 0.977 | 0.584 | 0.533 | 0.53      |
+| Edema              | 0.917 | 0.179 | 0.267 | 0.55      |
+| Emphysema          | 0.909 | 0.301 | 0.395 | 0.47      |
+| Effusion           | 0.896 | 0.546 | 0.556 | 0.59      |
+| Cardiomegaly       | 0.885 | 0.209 | 0.289 | 0.53      |
+| Pneumothorax       | 0.866 | 0.223 | 0.336 | 0.47      |
+| Mass               | 0.854 | 0.301 | 0.385 | 0.51      |
+| Atelectasis        | 0.846 | 0.414 | 0.442 | 0.50      |
+| Nodule             | 0.824 | 0.278 | 0.359 | 0.50      |
+| Fibrosis           | 0.822 | 0.132 | 0.245 | 0.46      |
+| Consolidation      | 0.806 | 0.137 | 0.212 | 0.51      |
+| Pleural Thickening | 0.800 | 0.139 | 0.223 | 0.47      |
+| Pneumonia          | 0.781 | 0.054 | 0.105 | 0.36      |
+| Infiltration       | 0.725 | 0.356 | 0.404 | 0.54      |
+
+How to read this honestly:
+
+- **Pneumonia and Infiltration are the weak spots.** Infiltration has the lowest AUROC. Pneumonia has a reasonable AUROC (0.781) but an AUPRC of 0.054 and F1 of 0.105, because it is very rare in the dataset (roughly 1% of images). Ranking cases is much easier than picking a useful cut-off for them.
+- **Hernia's 0.977 is the least reliable number in the table.** Hernia appears in well under 1% of images, so the validation set contains only a handful of positives. This is why its ROC curve is step-shaped.
+- **F1 values are optimistic.** Thresholds were chosen per class to maximise F1 on the same validation split the F1 is reported on. An evaluation on the official NIH test list is on the [roadmap](#roadmap).
+
+## Diseases detected
+
+Atelectasis, Cardiomegaly, Effusion, Infiltration, Mass, Nodule, Pneumonia, Pneumothorax, Consolidation, Edema, Emphysema, Fibrosis, Pleural Thickening, Hernia.
+
+Each image can have any number of these (multi-label), so every output is an independent sigmoid, not a softmax.
 
 ## Dataset
 
-**NIH ChestX-ray14** — Released by the National Institutes of Health.
+**NIH ChestX-ray14** (NIH Clinical Center): 112,120 frontal-view chest X-rays from 30,805 patients, with labels mined from radiology reports using NLP (weakly supervised). Images are 1024×1024 and are resized for training.
 
-- 112,120 frontal-view chest X-ray images
-- 30,805 unique patients
-- Labels extracted from radiology reports via NLP (weakly supervised)
-- Each image can have multiple disease labels (multilabel)
-- Images are 1024×1024 PNG, resized to 224×224 for training
+- Source: [NIH Clinical Center](https://nihcc.app.box.com/v/ChestXray-NIHCC) or [Kaggle](https://www.kaggle.com/datasets/nih-chest-xrays/data)
+- The dataset is **not** included in this repository.
 
-Dataset source: [NIH Clinical Center](https://nihcc.app.box.com/v/ChestXray-NIHCC) | [Kaggle](https://www.kaggle.com/datasets/nih-chest-xrays/data) 
-Download and place files in the `data/` directory:
-```
-data/
-├── images/
-└── Data_Entry_2017.csv
-```
-
----
-
-## Model Architecture
-
-**DenseNet121** pretrained on ImageNet, fine-tuned for multilabel chest X-ray classification.
+## Model
 
 ```
-DenseNet121
-├── features          (pretrained, frozen backbone)
-│   └── ...DenseBlocks + Transition Layers
-│   └── norm5         ← Grad-CAM target layer
+DenseNet121 (ImageNet-pretrained)
+├── features            DenseBlocks + transition layers
+│   └── norm5           ← Grad-CAM target layer
 └── classifier
-    └── Linear(1024 → 14)   ← custom head, trained from scratch
+    └── Linear(1024 → 14)   ← new head, one logit per disease
 ```
 
-Key design decisions:
-- **Sigmoid activation** (not softmax) — each of the 14 outputs is independent
-- **Binary Cross-Entropy loss** — standard for multilabel classification
-- **One-hot encoded labels** — multi-hot vectors per image
-- **Threshold = 0.5** — a disease is predicted positive if sigmoid output ≥ 0.5
+- **Loss:** binary cross-entropy with logits (independent per-class targets)
+- **Output:** sigmoid probability per disease
+- **Decision rule:** a disease is reported when its probability reaches that class's own threshold (see the table above), not a global 0.5. Rare classes like Pneumonia need a lower cut-off than common ones.
 
----
+## Training
 
-## Performance & Validation Metrics
+Training lives in [`notebooks/minorproject_ddp.ipynb`](notebooks/minorproject_ddp.ipynb), written to run on Kaggle's dual-GPU environment.
 
-The model's diagnostic capability is rigorously evaluated across all 14 classes using the Area Under the Receiver Operating Characteristic Curve (AUROC). 
+- **Distributed training:** PyTorch `DistributedDataParallel`, one process per GPU
+- **Experiment tracking:** Weights & Biases (metrics, curves, best checkpoint)
+- **Model selection:** the best checkpoint is saved as `best_model.pth`
+- **Threshold tuning:** per-class thresholds are searched after training and saved with the evaluation results
 
-<img width="3600" height="3000" alt="ROC_AUC_Curves" src="https://github.com/user-attachments/assets/22f4f117-1846-4a72-9c0a-192afd268802" />
+To reproduce on Kaggle:
 
+1. Create a new notebook and upload `minorproject_ddp.ipynb`.
+2. In the notebook settings, enable a **GPU** accelerator with two GPUs.
+3. Add the [NIH Chest X-rays](https://www.kaggle.com/datasets/nih-chest-xrays/data) dataset as an input.
+4. Add your Weights & Biases API key as a Kaggle secret (or turn W&B logging off in the config cell).
+5. Run all cells.
 
-### Class-Specific Validation Metrics (F1-Optimized)
-Standard **0.50** classification thresholds are mathematically suboptimal for highly imbalanced medical data. This project implements class-specific, data-driven thresholds calculated to explicitly maximize the F1-Score for each distinct pathology. 
+## Quickstart (inference)
 
-Below are the final convergence metrics sorted by AUROC performance, referencing the complete tabular data found in `medx_validation_metrics.xlsx`:
-
-| Pathology Class | AUROC Score | Optimal Threshold | Max F1-Score |
-| :--- | :--- | :--- | :--- |
-| **Hernia** | 0.9607 | 0.85 | 0.4211 |
-| **Emphysema** | 0.9450 | 0.85 | 0.5226 |
-| **Cardiomegaly** | 0.8934 | 0.85 | 0.3506 |
-| **Edema** | 0.8864 | 0.85 | 0.2328 |
-| **Pneumothorax** | 0.8811 | 0.75 | 0.4039 |
-| **Effusion** | 0.8789 | 0.70 | 0.5291 |
-| **Mass** | 0.8543 | 0.80 | 0.3692 |
-| **Pleural Thickening** | 0.8266 | 0.70 | 0.2362 |
-| **Nodule** | 0.8214 | 0.75 | 0.3582 |
-| **Fibrosis** | 0.8196 | 0.85 | 0.2011 |
-| **Atelectasis** | 0.8160 | 0.65 | 0.4153 |
-| **Consolidation** | 0.8038 | 0.75 | 0.2325 |
-| **Pneumonia** | 0.7373 | 0.75 | 0.0853 |
-| **Infiltration** | 0.7119 | 0.55 | 0.4295 |
-## Grad-CAM Explainability
-
-Grad-CAM (Gradient-weighted Class Activation Mapping) highlights which regions of the X-ray activated the model's prediction for a given disease. The target layer is `model.features.norm5` — the final batch norm of DenseNet121's feature extractor.
-
-```
-Input X-Ray → DenseNet121 → Sigmoid → Predicted Diseases
-                  ↓
-             Grad-CAM on norm5
-                  ↓
-         Heatmap overlaid on X-Ray
-```
-
----
-
-## Project Structure
-
-```
-MEDICAL-X/
-├── MEDICAL-X.ipynb          # Training notebook (Kaggle, GPU)
-├── predict.py               # Inference script with Grad-CAM support
-├── requirements.txt         # Python dependencies
-├── .gitignore
-└── README.md
-```
-
----
-
-## Setup
-
-### 1. Clone the repo
 ```bash
-git clone https://github.com/Harsh-Prajapati54/MEDICAL-X.git
-cd MEDICAL-X
-```
-
-### 2. Install dependencies
-```bash
-# Install PyTorch (CPU)
+git clone https://github.com/Harsh-Prajapati54/Medical_X.git
+cd Medical_X
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-
-# Install remaining dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Download the dataset
-Download the NIH ChestX-ray14 dataset from [Kaggle](https://www.kaggle.com/datasets/nih-chest-xrays/data) and place it as:
-```
-data/
-└── Data_Entry_2017.csv
-└── images_001/images/
-└── images_002/images/
-...
-```
+Weights are included as `best_model.pth` in the repo root.
 
----
-
-## Inference
-
-Run predictions on any chest X-ray image:
+**Command line**
 
 ```bash
-# Basic prediction
+# Predict on one image
 python predict.py --image path/to/xray.png
 
-# With custom model path and threshold
-python predict.py --image path/to/xray.png --model densenet121_model.pth --threshold 0.4
-
-# With Grad-CAM heatmap (saves gradcam_result.jpg)
+# Also save a Grad-CAM heatmap (writes gradcam_result.jpg)
 python predict.py --image path/to/xray.png --gradcam
 ```
 
-### Example output
-```
-── Result ──────────────────────────────────────
-  Image      : xray.png
-  Threshold  : 0.5
-  Detected   : Effusion, Infiltration
+**Web app**
 
-  All probabilities:
-    Effusion              : 82.34% ◄
-    Infiltration          : 71.12% ◄
-    Consolidation         :  23.45%
-    Atelectasis           :  18.90%
-    ...
-─────────────────────────────────────────────────
+```bash
+streamlit run app.py
 ```
 
----
+Or try the hosted demo: **[medical-x.streamlit.app](https://medical-x.streamlit.app)**
 
-## Training Methodology & Hyperparameters
+## Explainability (Grad-CAM)
 
-The final production model (`best121_model.pth`) was trained using an optimized deep learning workflow on advanced accelerator clusters. Given the high structural complexity and class imbalance inherent in multi-label thoracic datasets, the training pipeline incorporates rigid regularization and a dynamic reactive learning rate strategy to maximize generalization and prevent overfitting.
-
-### Optimization & Regularization Strategy
-* **Decoupled Weight Decay (`AdamW`):** Instead of standard `Adam`, the training loop utilizes `AdamW` with an elevated weight decay configuration. This mathematically penalizes exploding node weights, forcing the network's convolutional filters to analyze global structural anatomy (such as lung borders and tissue density) rather than over-focusing on high-frequency noise or isolated bright pixels.
-* **Reactive Learning Rate Scaling:** The pipeline uses a `ReduceLROnPlateau` scheduler tracking validation loss. If the validation metrics stall for two consecutive epochs, the scheduler dynamically cuts the learning rate by **90% (factor=0.1)**. This enables the model to bypass local minima and perform high-precision local gradient adjustments.
-* **Early Stopping Safety Net:** To conserve compute overhead and prevent catastrophic divergence, an automated early stopping tracker monitors validation loss with a **patience window of 5 epochs**. The optimal weights are captured and locked down immediately at the point of lowest validation loss before overfitting triggers.
-
-### Hyperparameter Configuration
-
-| Parameter / Strategy | Configuration Setting | Rationale |
-| :--- | :--- | :--- |
-| **Compute Hardware** | Nvidia H200 GPU | High-throughput VRAM acceleration for deep residual tracking |
-| **Core Architecture** | Fine-tuned DenseNet121 | Pretrained feature extractor backbone with custom linear head |
-| **Optimization Algorithm** | `AdamW` (Weight Decay = 0.05) | Decoupled regularization to mitigate multi-label memorization |
-| **Learning Rate Scheduler**| `ReduceLROnPlateau` (patience=2, factor=0.1) | Reactive fine-detail optimization during convergence plateaus |
-| **Regularization / Safety**| Early Stopping (patience=5) | Terminates training loop automatically; champion locked at Epoch 6 |
-| **Loss Function Setup** | Binary Cross-Entropy with Logits | Standardized approach for non-mutually exclusive multi-label tasks |
-| **Peak Convergence Acc.** | **~88.0% Validation Accuracy** | High-tier diagnostic metric achieved at the lowest validation loss floor |
-
----
-
-> 📊 **Training Log Insight (The Breakthrough Epoch):**
-> During training, the `ReduceLROnPlateau` scheduler successfully identified a validation plateau at Epoch 5 and dropped the learning rate to a microscopic fine-tuning scale. This immediately triggered a classic **"Bounce Back" in Epoch 6**, where the model broke through its previous loss floor, dropping `test_loss` to its ultimate optimal value of **0.9201** and lifting validation accuracy to **87.94%**. Subsequent epochs exhibited expanding train/validation divergence, prompting the early stopping mechanism to cleanly terminate execution at Epoch 11, preserving the Epoch 6 champion weights intact.
-
-
-
-
----
-
-## Requirements
+Grad-CAM weights the feature maps of `features.norm5` by the gradient of a class score, producing a heatmap of the image regions that pushed the model toward that prediction.
 
 ```
-torch
-torchvision
-numpy
-pandas
-matplotlib
-seaborn
-opencv-python
-Pillow
-tqdm
+X-ray → DenseNet121 → sigmoid → predicted diseases
+              ↓
+     Grad-CAM on norm5
+              ↓
+   heatmap overlaid on the X-ray
 ```
 
----
+A heatmap shows where the model looked, not that the model is right. Always check that attention falls on anatomically sensible regions. Models trained on this dataset can latch onto shortcuts such as text markers or devices in the image.
 
-## Acknowledgements
+## Project structure
 
-- NIH Clinical Center for the ChestX-ray14 dataset
-- [CheXNet paper](https://arxiv.org/abs/1711.05225) — inspiration for DenseNet121 on chest X-rays
-- PyTorch and torchvision for model building
+```
+Medical_X/
+├── app.py                      # Streamlit web app
+├── predict.py                  # Inference + Grad-CAM (CLI and importable)
+├── best_model.pth              # Trained weights
+├── requirements.txt
+├── notebooks/
+│   └── minorproject_ddp.ipynb  # Multi-GPU (DDP) training on Kaggle
+├── results/
+│   └── validation_metrics.csv  # Per-class AUROC / AUPRC / F1 / threshold
+├── docs/
+│   └── images/                 # ROC curves, Grad-CAM example
+├── LICENSE
+└── README.md
+```
 
----
+## Limitations
 
-## Disclaimer
+- **Weak labels.** Labels were extracted from reports by NLP, not read from the images by radiologists. Label noise is a known issue in this dataset and puts a ceiling on achievable accuracy, especially for Infiltration and Pneumonia.
+- **Single dataset, single hospital system.** There is no external validation. Performance on X-rays from other scanners, hospitals or populations is unknown.
+- **Validation-set results.** Metrics come from a validation split, and thresholds were tuned on it. Expect real held-out performance to be somewhat lower.
+- **Rare classes.** AUPRC and F1 are low for rare findings. At these operating points the model would produce many false alarms for Pneumonia.
+- **Not clinically validated.** Never use outputs for diagnosis or treatment decisions.
 
-This project is for educational and research purposes only. It is **not intended for clinical use or medical diagnosis**.
+## Roadmap
+
+- [ ] Evaluate on the official NIH test list and confirm patient-level separation between splits
+- [ ] Better class-imbalance handling (e.g. positive-class weighting or focal loss)
+- [ ] Probability calibration (temperature scaling)
+- [ ] External validation on another chest X-ray dataset
+- [ ] Unit tests and CI
+
+## Contributing
+
+Issues and pull requests are welcome. For larger changes, please open an issue first to discuss what you'd like to change.
+
+## References
+
+- Wang et al., *ChestX-ray8: Hospital-scale Chest X-ray Database and Benchmarks*, CVPR 2017 (the NIH dataset)
+- Huang et al., *Densely Connected Convolutional Networks*, CVPR 2017 (DenseNet)
+- Rajpurkar et al., *CheXNet: Radiologist-Level Pneumonia Detection on Chest X-Rays with Deep Learning*, 2017
+- Selvaraju et al., *Grad-CAM: Visual Explanations from Deep Networks via Gradient-based Localization*, ICCV 2017
+
+## License
+
+Released under the [Apache License 2.0](LICENSE). The NIH ChestX-ray14 dataset has its own terms of use; please review them before using the data.
+
+## Author
+
+**Harsh Prajapati** — [GitHub](https://github.com/Harsh-Prajapati54)
